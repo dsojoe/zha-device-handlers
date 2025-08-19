@@ -128,7 +128,7 @@ class ZosungIRControl(CustomCluster):
                 "Sending IR code: %s to %s", ir_msg, self.endpoint.device.ieee
             )
             seq = self.endpoint.device.next_seq()
-            self.endpoint.device.ir_msg_to_send = {seq: ir_msg}
+            self.endpoint.device.ir_msg_to_send.update({seq: ir_msg})
             self.create_catching_task(
                 self.endpoint.zosung_irtransmit.command(
                     0x00,
