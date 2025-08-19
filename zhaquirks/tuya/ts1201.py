@@ -275,7 +275,12 @@ class ZosungIRTransmit(CustomCluster):
             self.send_default_rsp(hdr, status=foundation.Status.SUCCESS)
 
         if hdr.command_id == self.ServerCommandDefs.receive_ir_frame_00.id:
-            _LOGGER.debug("Received IR frame 0x00 from %s", self.endpoint.device.ieee)
+            seq = args.seq
+            _LOGGER.debug(
+                "Received IR frame 0x00 from %s (seq: %s)",
+                self.endpoint.device.ieee,
+                seq,
+            )
 
             self.current_position = 0
             self.ir_msg.clear()
@@ -283,7 +288,7 @@ class ZosungIRTransmit(CustomCluster):
 
             cmd_01_args = {
                 "zero": 0,
-                "seq": args.seq,
+                "seq": seq,
                 "length": args.length,
                 "unk1": args.unk1,
                 "clusterid": args.clusterid,
@@ -291,40 +296,42 @@ class ZosungIRTransmit(CustomCluster):
                 "cmd": args.cmd,
                 "unk3": args.unk3,
             }
+            _LOGGER.debug("Command 0x01 args: %s", cmd_01_args)
             self.create_catching_task(
                 super().command(0x01, **cmd_01_args, expect_reply=True)
             )
-            cmd_02_args = {"seq": args.seq, "position": 0, "maxlen": 0x38}
+            cmd_02_args = {"seq": seq, "position": 0, "maxlen": 0x38}
+            _LOGGER.debug("Command 0x02 args: %s", cmd_02_args)
             self.create_catching_task(
                 super().command(0x02, **cmd_02_args, expect_reply=True)
             )
         elif hdr.command_id == self.ServerCommandDefs.receive_ir_frame_01.id:
+            seq = args.seq
             _LOGGER.debug(
-                "IR-Message-Code01 received, sequence: %s, from %s",
-                args.seq,
+                "Received IR frame 0x01 from %s (seq: %s)",
                 self.endpoint.device.ieee,
-            )
-            _LOGGER.debug(
-                "Message to send: %s, to %s",
-                self.endpoint.device.ir_msg_to_send[args.seq],
-                self.endpoint.device.ieee,
+                seq,
             )
         elif hdr.command_id == self.ServerCommandDefs.receive_ir_frame_02.id:
-            position = args.position
             seq = args.seq
+            _LOGGER.debug(
+                "Received IR frame 0x02 from %s (seq: %s)",
+                self.endpoint.device.ieee,
+                seq,
+            )
+            position = args.position
             maxlen = args.maxlen
+            if seq not in self.endpoint.device.ir_msg_to_send:
+                _LOGGER.error(
+                    "Message is not available (seq: %s). Available messages: %s",
+                    seq,
+                    self.endpoint.device.ir_msg_to_send.keys(),
+                )
             irmsg = self.endpoint.device.ir_msg_to_send[seq]
             msgpart = irmsg[position : position + maxlen]
             calculated_crc = 0
             for x in msgpart:
                 calculated_crc = (calculated_crc + ord(x)) % 0x100
-            _LOGGER.debug(
-                "Received IR frame 0x02 from %s, msgsrc: %s, position: %s, msgpart: %s",
-                self.endpoint.device.ieee,
-                calculated_crc,
-                position,
-                msgpart,
-            )
             cmd_03_args = {
                 "zero": 0,
                 "seq": seq,
@@ -332,6 +339,7 @@ class ZosungIRTransmit(CustomCluster):
                 "msgpart": msgpart.encode("utf-8"),
                 "msgpartcrc": calculated_crc,
             }
+            _LOGGER.debug("Command 0x03 args: %s", cmd_03_args)
             self.create_catching_task(
                 super().command(0x03, **cmd_03_args, expect_reply=True)
             )
